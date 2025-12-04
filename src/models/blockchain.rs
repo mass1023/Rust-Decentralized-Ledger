@@ -7,8 +7,6 @@ pub struct Blockchain {
     pub blocks: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
     pub difficulty: usize,
-    // pub mining_reward: f64,
-    // pub miner_address: String,
 }
 
 impl Blockchain {
