@@ -41,6 +41,23 @@ impl Blockchain {
         Ok(())
     }
 
+    pub fn get_balance(&self, address: &str) -> f64 {
+        let mut balance = 100.0;
+
+        for block in &self.blocks {
+            for transaction in &block.transactions {
+                if transaction.sender == address {
+                    balance -= transaction.amount;
+                }
+                if transaction.receiver == address {
+                    balance += transaction.amount;
+                }
+            }
+        }
+
+        balance
+    }
+
     pub fn mine_block(&mut self) -> Result<Block, BlockchainError> {
         if self.pending_transactions.is_empty() {
             return Err(BlockchainError::EmptyTransactions);
@@ -82,21 +99,22 @@ impl Blockchain {
         Ok(())
     }
 
-    pub fn get_balance(&self, address: &str) -> f64 {
-        let mut balance = 100.0;
-
-        for block in &self.blocks {
-            for transaction in &block.transactions {
-                if transaction.sender == address {
-                    balance -= transaction.amount;
-                }
-                if transaction.receiver == address {
-                    balance += transaction.amount;
-                }
-            }
+    pub fn replace_chain(&mut self, new_chain: Vec<Block>) -> bool {
+        if new_chain.len() <= self.blocks.len() {
+            return false;
         }
 
-        balance
+        let temp_blockchain = Blockchain {
+            blocks: new_chain.clone(),
+            pending_transactions: vec![],
+            difficulty: self.difficulty,
+        };
+        if let Err(_) = temp_blockchain.validate_chain() {
+            return false;
+        }
+
+        self.blocks = new_chain;
+        true
     }
 }
 
