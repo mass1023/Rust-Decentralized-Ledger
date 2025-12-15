@@ -13,14 +13,15 @@ pub struct Blockchain {
 
 impl Blockchain {
     pub fn new(difficulty: usize) -> Self {
-        let genesis_block = Block {
+        let mut genesis_block = Block {
             index: 0,
-            previous_hash: String::from("0"),
-            hash: String::from("0"),
+            previous_hash: [0u8; 32],
+            hash: [0u8; 32],
             nonce: 0,
             transactions: vec![],
             timestamp: Utc::now().timestamp() as u64,
         };
+        genesis_block.hash = genesis_block.hash();
 
         Blockchain {
             blocks: vec![genesis_block],
@@ -50,7 +51,7 @@ impl Blockchain {
 
         // mine the block (proof of work)
         let mut hash = new_block.hash();
-        while !hash.starts_with(&"0".repeat(self.difficulty)) {
+        while !hash.iter().take(self.difficulty).all(|&b| b == 0) {
             new_block.nonce += 1;
             hash = new_block.hash();
         }
@@ -65,8 +66,7 @@ impl Blockchain {
     }
 
     pub fn validate_chain(&self) -> Result<(), BlockchainError> {
-        for i in 1..self.blocks.len() {
-            let current_block = &self.blocks[i];
+        for (i, current_block) in self.blocks.iter().enumerate().skip(1) {
             let previous_block = &self.blocks[i - 1];
 
             // Check if the current block's previous hash matches the previous block's hash
@@ -98,21 +98,6 @@ impl Blockchain {
 
         balance
     }
-
-    pub fn print_chain(&self) {
-        for block in &self.blocks {
-            println!("Block #{}:", block.index);
-            println!("Previous Hash: {}", block.previous_hash);
-            println!("Hash: {}", block.hash);
-            println!("Nonce: {}", block.nonce);
-            println!("Timestamp: {}", block.timestamp);
-            println!("Transactions: {}", block.transactions.len());
-            for transaction in &block.transactions {
-                println!("  {} -> {} : {}", transaction.sender, transaction.receiver, transaction.amount);
-            }
-            println!();
-        }
-    }
 }
 
 
@@ -134,8 +119,8 @@ mod tests {
         let bc = Blockchain::new(2);
         assert_eq!(bc.blocks.len(), 1);
         assert_eq!(bc.blocks[0].index, 0);
-        assert_eq!(bc.blocks[0].previous_hash, "0");
-        assert_eq!(bc.blocks[0].hash, "0");
+        assert_eq!(bc.blocks[0].previous_hash, [0u8; 32]);
+        assert_ne!(bc.blocks[0].hash, [0u8; 32]); // hash is computed
         assert_eq!(bc.blocks[0].nonce, 0);
         assert!(bc.blocks[0].transactions.is_empty());
         assert!(bc.pending_transactions.is_empty());
@@ -171,7 +156,7 @@ mod tests {
         assert_eq!(bc.blocks.len(), 3);
         assert_eq!(bc.blocks[2], mined_block);
         assert!(bc.pending_transactions.is_empty());
-        assert!(mined_block.hash.starts_with("0"));
+        assert!(mined_block.hash.iter().take(bc.difficulty).all(|&b| b == 0));
     }
 
     #[test]
@@ -208,7 +193,7 @@ mod tests {
         let result = bc.mine_block();
         assert!(result.is_ok());
         // Tamper with hash
-        bc.blocks[2].hash = "tampered".to_string();
+        bc.blocks[2].hash = [b't'; 32];
         assert!(bc.validate_chain().is_err());
     }
 

@@ -28,5 +28,5 @@ fn main() {
         Err(e) => println!("Is chain valid? false - Error: {:?}", e),
     }
     println!("/////////////////////////////////////");
-    bc.print_chain();
+    println!("Blockchain state: {:?}", bc);
 }
