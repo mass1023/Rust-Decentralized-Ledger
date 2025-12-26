@@ -40,11 +40,6 @@ impl Block {
                 transaction.timestamp
             );
             hasher.update(tx.as_bytes());
-            // // Alternatively, you can update each field separately:
-            // hasher.update(transaction.sender.clone());
-            // hasher.update(transaction.receiver.clone());
-            // hasher.update(transaction.amount.to_string());
-            // hasher.update(transaction.timestamp.to_string());
         }
         hasher.finalize().into()
     }
