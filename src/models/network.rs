@@ -87,10 +87,10 @@ impl DisplayAsync for Network{
         for (node_id, node_arc) in nodes.iter() {
             let node = node_arc.lock().await;
             output.push_str(&format!("\nNode: {}", node_id));
-            output.push_str(&format!("  Chain length: {}", node.blockchain.blocks.len()));
-            output.push_str(&format!("  Latest block hash: {:?}", node.blockchain.blocks.last().unwrap().hash));
-            output.push_str(&format!("  Pending transactions: {}", node.blockchain.pending_transactions.len()));
-            output.push_str(&format!("  Peers: {:?}", node.peers));
+            output.push_str(&format!("\nChain length: {}", node.blockchain.blocks.len()));
+            output.push_str(&format!("\nLatest block hash: {:?}", node.blockchain.blocks.last().unwrap().hash));
+            output.push_str(&format!("\nPending transactions: {}", node.blockchain.pending_transactions.len()));
+            output.push_str(&format!("\nPeers: {:?}", node.peers));
         }
         output.push_str("\n====================================\n");
         output
