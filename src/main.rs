@@ -55,42 +55,36 @@ async fn main() {
     let net_a = Arc::clone(&network);
     let task_a = tokio::spawn(async move {
         sleep(Duration::from_millis(100)).await;
-        let nodes = net_a.nodes.lock().await;
-        if let Some(node_arc) = nodes.get("Node_A") {
-            let mut node = node_arc.lock().await;
-            println!("[Node_A] Starting to mine...");
-            match node.mine_block() {
-                Ok(block) => {
-                    println!("[Node_A] ✅ Mined block #{}", block.index);
-                    drop(node);
-                    drop(nodes);
-                    net_a.broadcast_block("Node_A", block).await;
-                }
-                Err(e) => {
-                    println!("[Node_A] ❌ Failed to mine block: {:?}", e);
-                }
-            }
+        let node_arc_clone = {
+            let nodes = net_a.nodes.read().unwrap();
+            let Some(node_arc) = nodes.get("Node_A") else { return };
+            Arc::clone(&node_arc)
+        };
+        let block = tokio::task::spawn_blocking(move || {
+            let mut node = node_arc_clone.lock().unwrap();
+            node.mine_block()
+        }).await.ok().and_then(|r| r.ok());
+        if let Some(block) = block {
+            println!("[Node_A] ✅ Mined block #{}", block.index);
+            net_a.broadcast_block("Node_A", block).await;
         }
     });
 
     let net_b = Arc::clone(&network);
     let task_b = tokio::spawn(async move {
         sleep(Duration::from_millis(150)).await;
-        let nodes = net_b.nodes.lock().await;
-        if let Some(node_arc) = nodes.get("Node_B") {
-            let mut node = node_arc.lock().await;
-            println!("[Node_B] Starting to mine...");
-            match node.mine_block() {
-                Ok(block) => {
-                    println!("[Node_B] ✅ Mined block #{}", block.index);
-                    drop(node);
-                    drop(nodes);
-                    net_b.broadcast_block("Node_B", block).await;
-                }
-                Err(e) => {
-                    println!("[Node_B] ❌ Failed to mine block: {:?}", e);
-                }
-            }
+        let node_arc_clone = {
+            let nodes = net_b.nodes.read().unwrap();
+            let Some(node_arc) = nodes.get("Node_B") else { return };
+            Arc::clone(&node_arc)
+        };
+        let block = tokio::task::spawn_blocking(move || {
+            let mut node = node_arc_clone.lock().unwrap();
+            node.mine_block()
+        }).await.ok().and_then(|r| r.ok());
+        if let Some(block) = block {
+            println!("[Node_B] ✅ Mined block #{}", block.index);
+            net_b.broadcast_block("Node_B", block).await;
         }
     });
 
@@ -111,15 +105,21 @@ async fn main() {
     }
 
     println!("⛏️  Node C mining...\n");
-    let nodes = network.nodes.lock().await;
-    if let Some(node_arc) = nodes.get("Node_C") {
-        let mut node = node_arc.lock().await;
-        if let Ok(block) = node.mine_block() {
-            println!("[Node_C] ✅ Mined block #{}", block.index);
-            drop(node);
-            drop(nodes);
-            network.broadcast_block("Node_C", block).await;
-        }
+    let node_arc_clone = {
+        let nodes = network.nodes.read().unwrap();
+        nodes.get("Node_C").map(|node_arc| Arc::clone(&node_arc))
+    };
+    let block = if let Some(node_arc_clone) = node_arc_clone {
+        tokio::task::spawn_blocking(move || {
+            let mut node = node_arc_clone.lock().unwrap();
+            node.mine_block()
+        }).await.ok().and_then(|r| r.ok())
+    } else {
+        None
+    };
+    if let Some(block) = block {
+        println!("[Node_C] ✅ Mined block #{}", block.index);
+        network.broadcast_block("Node_C", block).await;
     }
 
     sleep(Duration::from_millis(500)).await;

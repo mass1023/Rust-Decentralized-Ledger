@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::models::{Block, Blockchain};
 
 pub struct Node {
@@ -26,7 +28,9 @@ impl Node {
 
         if block.previous_hash == latest.hash && block.index == latest.index + 1 {
             if block.hash[..self.blockchain.difficulty].iter().all(|&b| b == 0) {
-                self.blockchain.blocks.push(block);
+                let mut new_blocks = (*self.blockchain.blocks).clone();
+                new_blocks.push(block);
+                self.blockchain.blocks = Arc::new(new_blocks);
                 return Ok(());
             }
         }
@@ -35,8 +39,8 @@ impl Node {
         Err(NodeError::InvalidBlockHash)
     }
 
-    pub fn receive_chain(&mut self, chain: Vec<Block>) -> bool {
-        self.blockchain.replace_chain(chain)
+    pub fn receive_chain(&mut self, chain: &Vec<Block>) -> bool {
+        self.blockchain.replace_chain(Arc::new(chain.clone()))
     }
 
     pub fn mine_block(&mut self) -> Result<Block, super::blockchain::BlockchainError> {
