@@ -1,14 +1,13 @@
 use chrono::Utc;
+use std::sync::Arc;
 
 use crate::models::{Block, Transaction};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Blockchain {
-    pub blocks: Vec<Block>,
+    pub blocks: Arc<Vec<Block>>,
     pub pending_transactions: Vec<Transaction>,
     pub difficulty: usize,
-    // pub mining_reward: f64,
-    // pub miner_address: String,
 }
 
 impl Blockchain {
@@ -24,7 +23,7 @@ impl Blockchain {
         genesis_block.hash = genesis_block.hash();
 
         Blockchain {
-            blocks: vec![genesis_block],
+            blocks: Arc::new(vec![genesis_block]),
             pending_transactions: vec![],
             difficulty,
 
@@ -39,6 +38,23 @@ impl Blockchain {
         }
         self.pending_transactions.push(transaction);
         Ok(())
+    }
+
+    pub fn get_balance(&self, address: &str) -> f64 {
+        let mut balance = 100.0;
+
+        for block in &*self.blocks {
+            for transaction in &block.transactions {
+                if transaction.sender == address {
+                    balance -= transaction.amount;
+                }
+                if transaction.receiver == address {
+                    balance += transaction.amount;
+                }
+            }
+        }
+
+        balance
     }
 
     pub fn mine_block(&mut self) -> Result<Block, BlockchainError> {
@@ -58,7 +74,9 @@ impl Blockchain {
 
         // adds block to chain
         new_block.hash = hash;
-        self.blocks.push(new_block.clone());
+        let mut new_blocks = (*self.blocks).clone();
+        new_blocks.push(new_block.clone());
+        self.blocks = Arc::new(new_blocks);
         // clear pending transactions
         self.pending_transactions.clear();
 
@@ -82,21 +100,22 @@ impl Blockchain {
         Ok(())
     }
 
-    pub fn get_balance(&self, address: &str) -> f64 {
-        let mut balance = 100.0;
-
-        for block in &self.blocks {
-            for transaction in &block.transactions {
-                if transaction.sender == address {
-                    balance -= transaction.amount;
-                }
-                if transaction.receiver == address {
-                    balance += transaction.amount;
-                }
-            }
+    pub fn replace_chain(&mut self, new_chain: Arc<Vec<Block>>) -> bool {
+        if new_chain.len() <= self.blocks.len() {
+            return false;
         }
 
-        balance
+        let temp_blockchain = Blockchain {
+            blocks: new_chain.clone(),
+            pending_transactions: vec![],
+            difficulty: self.difficulty,
+        };
+        if let Err(_) = temp_blockchain.validate_chain() {
+            return false;
+        }
+
+        self.blocks = new_chain;
+        true
     }
 }
 
@@ -117,12 +136,12 @@ mod tests {
     #[test]
     fn test_new_blockchain() {
         let bc = Blockchain::new(2);
-        assert_eq!(bc.blocks.len(), 1);
-        assert_eq!(bc.blocks[0].index, 0);
-        assert_eq!(bc.blocks[0].previous_hash, [0u8; 32]);
-        assert_ne!(bc.blocks[0].hash, [0u8; 32]); // hash is computed
-        assert_eq!(bc.blocks[0].nonce, 0);
-        assert!(bc.blocks[0].transactions.is_empty());
+        assert_eq!((*bc.blocks).len(), 1);
+        assert_eq!((*bc.blocks)[0].index, 0);
+        assert_eq!((*bc.blocks)[0].previous_hash, [0u8; 32]);
+        assert_ne!((*bc.blocks)[0].hash, [0u8; 32]); // hash is computed
+        assert_eq!((*bc.blocks)[0].nonce, 0);
+        assert!((*bc.blocks)[0].transactions.is_empty());
         assert!(bc.pending_transactions.is_empty());
         assert_eq!(bc.difficulty, 2);
     }
@@ -142,10 +161,12 @@ mod tests {
         let mut bc = Blockchain::new(1); // low difficulty
         // Add a transaction to give Alice balance
         let tx_genesis = Transaction::new("Genesis".to_string(), "Alice".to_string(), 100.0);
-        let mut genesis_block = Block::new(1, bc.blocks[0].hash.clone(), vec![tx_genesis]);
+        let mut genesis_block = Block::new(1, (*bc.blocks)[0].hash.clone(), vec![tx_genesis]);
         genesis_block.nonce = 1;
         genesis_block.hash = genesis_block.hash();
-        bc.blocks.push(genesis_block);
+        let mut v = (*bc.blocks).clone();
+        v.push(genesis_block);
+        bc.blocks = Arc::new(v);
         // Now add transaction from Alice
         let tx = Transaction::new("Alice".to_string(), "Bob".to_string(), 10.0);
         let result = bc.add_transaction(tx.clone());
@@ -153,8 +174,8 @@ mod tests {
         let result = bc.mine_block();
         assert!(result.is_ok());
         let mined_block = result.unwrap();
-        assert_eq!(bc.blocks.len(), 3);
-        assert_eq!(bc.blocks[2], mined_block);
+        assert_eq!((*bc.blocks).len(), 3);
+        assert_eq!((*bc.blocks)[2], mined_block);
         assert!(bc.pending_transactions.is_empty());
         assert!(mined_block.hash.iter().take(bc.difficulty).all(|&b| b == 0));
     }
@@ -164,10 +185,12 @@ mod tests {
         let mut bc = Blockchain::new(1);
         // Add balance
         let tx_genesis = Transaction::new("Genesis".to_string(), "Alice".to_string(), 100.0);
-        let mut genesis_block = Block::new(1, bc.blocks[0].hash.clone(), vec![tx_genesis]);
+        let mut genesis_block = Block::new(1, (*bc.blocks)[0].hash.clone(), vec![tx_genesis]);
         genesis_block.nonce = 1;
         genesis_block.hash = genesis_block.hash();
-        bc.blocks.push(genesis_block);
+        let mut v = (*bc.blocks).clone();
+        v.push(genesis_block);
+        bc.blocks = Arc::new(v);
         // Add transaction
         let tx = Transaction::new("Alice".to_string(), "Bob".to_string(), 10.0);
         let result = bc.add_transaction(tx);
@@ -182,10 +205,12 @@ mod tests {
         let mut bc = Blockchain::new(1);
         // Add balance
         let tx_genesis = Transaction::new("Genesis".to_string(), "Alice".to_string(), 100.0);
-        let mut genesis_block = Block::new(1, bc.blocks[0].hash.clone(), vec![tx_genesis]);
+        let mut genesis_block = Block::new(1, (*bc.blocks)[0].hash.clone(), vec![tx_genesis]);
         genesis_block.nonce = 1;
         genesis_block.hash = genesis_block.hash();
-        bc.blocks.push(genesis_block);
+        let mut v = (*bc.blocks).clone();
+        v.push(genesis_block);
+        bc.blocks = Arc::new(v);
         // Add transaction
         let tx = Transaction::new("Alice".to_string(), "Bob".to_string(), 10.0);
         let result = bc.add_transaction(tx);
@@ -193,7 +218,9 @@ mod tests {
         let result = bc.mine_block();
         assert!(result.is_ok());
         // Tamper with hash
-        bc.blocks[2].hash = [b't'; 32];
+        let mut v = (*bc.blocks).clone();
+        v[2].hash = [b't'; 32];
+        bc.blocks = Arc::new(v);
         assert!(bc.validate_chain().is_err());
     }
 
@@ -203,10 +230,12 @@ mod tests {
         // Manually add a block with transactions
         let tx1 = Transaction::new("Alice".to_string(), "Bob".to_string(), 50.0);
         let tx2 = Transaction::new("Bob".to_string(), "Charlie".to_string(), 20.0);
-        let mut block = Block::new(1, bc.blocks[0].hash.clone(), vec![tx1, tx2]);
+        let mut block = Block::new(1, (*bc.blocks)[0].hash.clone(), vec![tx1, tx2]);
         block.nonce = 1;
         block.hash = block.hash(); // compute hash
-        bc.blocks.push(block);
+        let mut v = (*bc.blocks).clone();
+        v.push(block);
+        bc.blocks = Arc::new(v);
 
         assert_eq!(bc.get_balance("Alice"), 50.0); // 100 - 50
         assert_eq!(bc.get_balance("Bob"), 130.0); // 100 + 50 - 20
